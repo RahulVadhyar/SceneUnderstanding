@@ -3,7 +3,6 @@ from torch import nn
 from torch.nn import functional as F
 import mobilevit
 
-
 def compute_freqs_cis(embed_dim: int, max_seq_length: int, theta: float = 10000.0):
     freqs = 1.0 / (theta ** (torch.arange(0, embed_dim, 2)[: (embed_dim // 2)].float() / embed_dim))
     t = torch.arange(max_seq_length, device=freqs.device)  # type: ignore
@@ -108,6 +107,7 @@ class Attention(nn.Module):
         key = self.key_attn(key)
         value = self.value_attn(value)
         
+        query, key = apply_rotary_emb(query, key, query_channels, query_block)
 
         key = key.view(key_batch, key_block, self.num_heads, key_channels // self.num_heads).transpose(1, 2) # (B, nh, T, hs)
         query = query.view(query_batch, query_block, self.num_heads, query_channels // self.num_heads).transpose(1, 2) # (B, nh, T, hs)
@@ -145,6 +145,7 @@ class Decoder(nn.Module):
     def __init__(self, input_shape, output_shape, num_heads, dropout = 0):
         super(Decoder, self).__init__()
         self.feed_forward = nn.Sequential(
+            nn.Dropout(dropout),
             nn.Linear(input_shape, input_shape*2, bias = False),
             nn.SiLU(),
             nn.Linear(input_shape*2, output_shape, bias = False),
@@ -161,12 +162,36 @@ class Decoder(nn.Module):
         x = self.dropout(x)
         x1 = self.layernorm(x)
         x = x + self.MHA(x1)
+        x = self.dropout(x)
         x2 = self.layernorm2(x)
-        # print(x2.shape, features.shape)
         x = x + self.MHA2(x2, features, features)[0]
         x3 = self.layernorm3(x)
         x = x + self.feed_forward(x3)
         return x
+
+class Encoder(nn.Module):
+    def __init__(self, input_shape, output_shape, num_heads, dropout = 0):
+        super(Encoder, self).__init__()
+        self.feed_forward = nn.Sequential(
+            nn.Dropout(dropout),
+            nn.Linear(input_shape, input_shape*2, bias = False),
+            nn.SiLU(),
+            nn.Linear(input_shape*2, output_shape, bias = False),
+            nn.SiLU(),
+        )
+        self.layernorm = RMSNorm(input_shape)
+        self.layernorm2 = RMSNorm(input_shape)
+        self.MHA = Attention(embed_dim=input_shape, num_heads=num_heads, bias = False, dropout=dropout)
+        self.dropout = nn.Dropout(dropout)
+
+    def forward(self, x):
+        x = self.dropout(x)
+        x1 = self.layernorm(x)
+        x = x + self.MHA(x1, x1, x1)[0]
+        x2 = self.layernorm2(x)
+        x = x + self.feed_forward(x2)
+        return x
+
 
 class Foundation(nn.Module):
     def __init__(self, num_blocks,
@@ -178,38 +203,57 @@ class Foundation(nn.Module):
                        ):
         super(Foundation, self).__init__()
         self.text_embedding = nn.Embedding(vocab_size, embd_size)
-        self.block = nn.ModuleList([Decoder(embd_size, embd_size, num_heads, dropout) for _ in range(num_blocks)])
+        self.encoder_block = nn.ModuleList([Decoder(embd_size, embd_size, num_heads, dropout) for _ in range(num_blocks)])
+        self.decoder_block = nn.ModuleList([Encoder(embd_size, embd_size, num_heads, dropout) for _ in range(2)])
         self.feature_encoder = mobilevit.mobilevit_xs()
-        self.feature_encoder.eval()
-        self.feature_vector = nn.Linear(8*8, embd_size)
+        self.feature_vector = nn.Linear(12*12, embd_size)
         self.feature_vector2 = nn.Linear(384, embd_size)
-        self.dense = nn.Linear(embd_size, vocab_size)
+        self.dense = nn.Linear(embd_size, vocab_size, bias = False)
         self.embed_size = embd_size
         self.unk_char = unk_char
+
+        self.text_embedding.weight = self.dense.weight
+
+        print(f"MobileViT has {sum(p.numel() for p in self.feature_encoder.parameters())} parameters")
 
     # @torch.compile(dynamic = True, mode = 'reduce-overhead')
     def forward(self, x, y = None, return_loss = False):
         tokens, image = x        
         image = self.feature_encoder(image)
-        image = image.view(-1, 384, 64)
-        image = self.feature_vector(image).view(-1, self.embed_size, 384)
-        image = self.feature_vector2(image).view(-1, self.embed_size, self.embed_size)
-        
+        # print(image.shape)
+        image = image.view(image.shape[0], image.shape[1], 12*12)
+        image = self.feature_vector(image).view(image.shape[0], self.embed_size, image.shape[1])
+        image = self.feature_vector2(image).view(image.shape[0], self.embed_size, self.embed_size)
+
+        for decoder in self.decoder_block:
+            image = decoder(image)
+
         x = self.text_embedding(tokens)
-        for decoder in self.block:
+        for decoder in self.encoder_block:
             x = decoder(x, image)
+            
         x = self.dense(x)
         if return_loss:
             mask = (y != self.unk_char).to(torch.int64).view(-1)
-            x = F.cross_entropy(x.view(-1, x.size(-1)), y.view(-1), ignore_index=-1, reduction='none')
-            x = (x * mask).sum() / mask.sum()
+            loss = F.cross_entropy(x.view(-1, x.size(-1)), y.view(-1), 
+                                   ignore_index=-1, reduction='none', label_smoothing=0.2)
+            loss = (loss * mask).sum() / mask.sum()
+            acc = (x.argmax(dim = -1) == y).to(torch.float32).view(-1)
+            acc = (acc * mask).sum() / mask.sum()
+            return loss, acc
+
         else: 
             x = F.softmax(x, dim = -1)
-        return x
+            return x
     
     def get_num_params(self):
         n_params = sum(p.numel() for p in self.parameters())
         return n_params
-    
 
-    
+    def config_optimizer(self, feature_lr, other_lr):
+        feature_params = list(self.feature_encoder.parameters())
+        other_params = list(self.parameters())
+        other_params = list(self.encoder_block.parameters()) + list(self.dense.parameters()) + list(self.feature_vector.parameters()) + list(self.feature_vector2.parameters()) + list(self.decoder_block.parameters())
+        optimizer = torch.optim.Adam([{'params': feature_params, 'lr': feature_lr},
+                                      {'params': other_params, 'lr': other_lr}])
+        return optimizer

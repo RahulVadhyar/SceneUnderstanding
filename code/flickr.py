@@ -1,19 +1,20 @@
 import torch
-import torchvision
 from tokenizer import Tokenizer
 import json
 import pandas as pd
 from PIL import Image
+import torchvision
 
 class CustomDataset(torch.utils.data.Dataset):
     def __init__(self, img_size = (256, 256)):
-        metadata = json.load(open("/home/starsystem/Documents/SceneUnderstanding/dataset(coco)/annotations_trainval2014/annotations/captions_train2014.json"))
-        self.annotations = metadata['annotations']
-        self.img_data = metadata['images']
-        self.img_data = pd.DataFrame(self.img_data)
+        lines = open("/home/starsystem/Documents/SceneUnderstanding/dataset(coco)/flickr8kcaptions.txt", 'r').readlines()
+        lines = lines[1:]
+        lines = [line.split('.jpg,') for line in lines]
+        self.path = "/home/starsystem/Documents/SceneUnderstanding/dataset(coco)/flickr8k/"
+        self.df = pd.DataFrame(lines, columns = ['image_id', 'caption'])
         self.tokenizer = Tokenizer()
         self.tokenizer.load("tokenizer2.pkl")
-        self.length = len(self.annotations)
+        self.length = len(self.df)
         self.img_size = img_size
         self.sample_output = [self.tokenizer.char_to_idx["[UNK]"] for _ in range(256)]
         self.img_processor = torchvision.transforms.Compose([
@@ -28,13 +29,13 @@ class CustomDataset(torch.utils.data.Dataset):
         return self.tokenizer.char_to_idx["[UNK]"]
 
     def __getitem__(self, idx):
-        annotation = self.annotations[idx]
-        img_id = annotation['image_id']
-        x = annotation['caption']
+        image_id = self.df.iloc[idx]['image_id']
+        caption = self.df.iloc[idx]['caption']
+        x = caption
         x = self.tokenizer.encode(x)
 
-        img_path = self.img_data.loc[self.img_data['id'] == img_id]['file_name'].values[0]
-        img = Image.open("/home/starsystem/Documents/SceneUnderstanding/dataset(coco)/train2014/" + img_path)
+        img_path = self.path + image_id + ".jpg"
+        img = Image.open(img_path)
         if img.mode != 'RGB':
             img = img.convert('RGB')
         img = self.img_processor(img)
