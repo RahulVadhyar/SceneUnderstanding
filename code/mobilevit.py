@@ -239,7 +239,7 @@ def mobilevit_xxs():
 
 def mobilevit_xs():
     dims = [96, 120, 144]
-    channels = [16, 32, 48, 48, 64, 64, 80, 80, 96, 96, 384]
+    channels = [16, 32, 48, 48, 64, 64, 80, 80, 96, 96, 320]
     return MobileViT((256, 256), dims, channels, num_classes=1000)
 
 
