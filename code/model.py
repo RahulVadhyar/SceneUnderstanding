@@ -22,7 +22,7 @@ def apply_rotary_emb(input_tensor, C, T):
     xq_real = xq_[:, :, :, 0]
     xq_imag = xq_[:, :, :, 1]
 
-    freqs_real, freqs_imag = compute_freqs_cis(C, 256, input_tensor.device)
+    freqs_real, freqs_imag = compute_freqs_cis(C, 768, input_tensor.device)
     freqs_real = freqs_real[:T]
     freqs_imag = freqs_imag[:T]
 
@@ -207,7 +207,7 @@ class Foundation(nn.Module):
         self.embed_size = embd_size
         self.unk_char = unk_char
 
-        self.text_embedding.weight = self.dense.weight
+        # self.text_embedding.weight = self.dense.weight
 
         print(f"MobileViT has {sum(p.numel() for p in self.feature_encoder.parameters())} parameters")
     
@@ -225,7 +225,6 @@ class Foundation(nn.Module):
         image = self.feature_vector2(image).view(image.shape[0], self.embed_size, self.embed_size)
 
         x = self.text_embedding(tokens)
-
         for decoder in self.encoder_block:
             x = decoder(x, image)
 
@@ -235,7 +234,7 @@ class Foundation(nn.Module):
         if return_loss:
             mask = (y != self.unk_char).to(torch.int64).view(-1)
             loss = F.cross_entropy(x.view(-1, x.size(-1)), y.view(-1), 
-                                   ignore_index=-1, reduction='none', label_smoothing=0.1)
+                                   ignore_index=-1, reduction='none', label_smoothing=0.2)
             loss = (loss * mask).sum() / mask.sum()
             acc = (x.argmax(dim = -1) == y).to(torch.float32).view(-1)
             acc = (acc * mask).sum() / mask.sum()
@@ -249,5 +248,5 @@ class Foundation(nn.Module):
         return n_params
 
     def config_optimizer(self, lr):
-        optimizer = torch.optim.Adam(self.parameters(), lr = lr)
+        optimizer = torch.optim.AdamW(self.parameters(), lr = lr, weight_decay=0.1)
         return optimizer
