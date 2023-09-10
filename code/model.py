@@ -174,7 +174,7 @@ class Decoder(nn.Module):
         x = x + self.MHA(x1)
 
         x1 = self.layernorm2(x)
-        x = x + self.MHA2(x1, features, features)
+        x = x + self.MHA2(x1, features, features) 
 
         x1 = self.layernorm3(x)
         x = x + self.feed_forward(x1)

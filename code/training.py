@@ -43,16 +43,16 @@ dataloader = torch.utils.data.DataLoader(dataset,
                                          num_workers = NUM_WORKERS,
                                          collate_fn = collate_fn)
 
-model = Foundation(num_blocks = NUM_BLOCKS,
-                   num_heads = NUM_HEADS, 
-                   unk_char = dataset.getunk(),
-                   vocab_size=VOCAB_SIZE, 
-                   embd_size=EMBD_SIZE, 
-                   dropout = DROPOUT).to(device)
+# model = Foundation(num_blocks = NUM_BLOCKS,
+#                    num_heads = NUM_HEADS, 
+#                    unk_char = dataset.getunk(),
+#                    vocab_size=VOCAB_SIZE, 
+#                    embd_size=EMBD_SIZE, 
+#                    dropout = DROPOUT).to(device)
 print(f"The unk char is {dataset.getunk()}")
 
 
-# model = torch.load(MODEL_SAVE_DIR + MODEL_SAVE_NAME)
+model = torch.load(MODEL_SAVE_DIR + MODEL_SAVE_NAME)
 optimizer = model.config_optimizer(LEARNING_RATE,)
 
 
