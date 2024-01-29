@@ -9,7 +9,7 @@ import torch
 from tokenizer import Tokenizer
 import torchvision
 
-MODEL_SAVE_DIR = "C:\\Users\\vadhy\\Documents\\SceneUnderstanding\\models\\Foundation.pt"
+MODEL_SAVE_DIR = "C:\\Users\\Rahul Satish Vadhyar\\Documents\\SceneUnderstanding\\models\\Foundation.pt"
 IMG_SIZE = 256
 
 class Loader:
