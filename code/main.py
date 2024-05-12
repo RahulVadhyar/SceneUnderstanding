@@ -9,7 +9,7 @@ import torch
 from tokenizer import Tokenizer
 import torchvision
 
-MODEL_SAVE_DIR = "C:\\Users\\Rahul Satish Vadhyar\\Documents\\SceneUnderstanding\\models\\Foundation.pt"
+MODEL_SAVE_DIR = "../models/Foundation.pt"
 IMG_SIZE = 256
 
 class Loader:
@@ -55,10 +55,17 @@ class Loader:
             i = 0
             while True:
                 output = self.model((text.unsqueeze(0), img))
-                output = output.argmax(dim = -1)
-                text = torch.concat([text, output[-1][-1].unsqueeze(0)], dim = -1)
-                if output[0][-1] == self.tokenizer.char_to_idx["[END]"]:
+                print(f"Argmax: {torch.argmax(output[0][-1])}")
+                output = torch.multinomial(output[0][-1]/1e-8, 1)
+                print(f"Multinomial: {output}")
+                text = torch.concat([text, output], dim = -1)
+                if output == self.tokenizer.char_to_idx["[END]"]:
                     break
+                # output = output.argmax(dim = -1)
+                # text = torch.concat([text, output[-1][-1].unsqueeze(0)], dim = -1)
+                # if output[0][-1] == self.tokenizer.char_to_idx["[END]"]:
+                #     break
+
                 i += 1
                 if i > 100:
                     break

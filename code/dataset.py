@@ -7,7 +7,7 @@ from PIL import Image
 
 class CustomDataset(torch.utils.data.Dataset):
     def __init__(self, img_size = (256, 256)):
-        metadata = json.load(open("/home/starsystem/Documents/SceneUnderstanding/dataset(coco)/annotations_trainval2014/annotations/captions_train2014.json"))
+        metadata = json.load(open("../dataset/annotations/captions_train2014.json"))
         self.annotations = metadata['annotations']
         self.img_data = metadata['images']
         self.img_data = pd.DataFrame(self.img_data)
@@ -34,7 +34,7 @@ class CustomDataset(torch.utils.data.Dataset):
         x = self.tokenizer.encode(x)
 
         img_path = self.img_data.loc[self.img_data['id'] == img_id]['file_name'].values[0]
-        img = Image.open("/home/starsystem/Documents/SceneUnderstanding/dataset(coco)/train2014/" + img_path)
+        img = Image.open("../dataset/train2014/" + img_path)
         if img.mode != 'RGB':
             img = img.convert('RGB')
         img = self.img_processor(img)

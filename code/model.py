@@ -3,9 +3,7 @@ from torch import nn
 from torch.nn import functional as F
 import mobilevit
 
-#the following two functions are for rotary embeddings, which is described in this paper
-#INSERT PAPER HERE
-
+#the following two functions are for rotary embeddings
 def compute_freqs_cis(embed_dim: int, max_seq_length: int, device, theta: float = 10000.0):
     #we compute the frequencies for the rotary embeddings
     freqs = 1.0 / (theta ** (torch.arange(0, embed_dim, 2, device = device)[: (embed_dim // 2)].float() / embed_dim))
@@ -198,7 +196,6 @@ class Foundation(nn.Module):
         self.text_embedding = nn.Embedding(vocab_size, embd_size)
         self.encoder_block = nn.ModuleList([Decoder(embd_size, embd_size, num_heads, dropout) for _ in range(num_blocks)])
         self.feature_encoder = mobilevit.mobilevit_xs()
-
         self.feature_vector = nn.Linear(8*8, embd_size)
         self.feature_vector2 = nn.Linear(320, embd_size)
 
@@ -211,9 +208,7 @@ class Foundation(nn.Module):
 
         print(f"MobileViT has {sum(p.numel() for p in self.feature_encoder.parameters())} parameters")
     
-    #wanted to use torch.compile, but it takes too long to compile(around 10 minutes), 
-    # and the performance is not that much better :(, maybe with an A100 it would be better
-    # @torch.compile(dynamic = True, mode = 'reduce-overhead')
+    # @torch.compile(dynamic = True, fullgraph = True, options = {"epilogue_fusion":True, "max_autotune" : True, "shape_padding":True, "triton.cudagraphs" : True})
     def forward(self, x, y = None, return_loss = False):
         tokens, image = x        
         image = self.feature_encoder(image)
@@ -234,7 +229,7 @@ class Foundation(nn.Module):
         if return_loss:
             mask = (y != self.unk_char).to(torch.int64).view(-1)
             loss = F.cross_entropy(x.view(-1, x.size(-1)), y.view(-1), 
-                                   ignore_index=-1, reduction='none', label_smoothing=0.2)
+                                   ignore_index=-1, reduction='none', label_smoothing=0.4)
             loss = (loss * mask).sum() / mask.sum()
             acc = (x.argmax(dim = -1) == y).to(torch.float32).view(-1)
             acc = (acc * mask).sum() / mask.sum()

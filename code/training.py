@@ -17,7 +17,7 @@ NUM_BLOCKS = 10
 DROPOUT = 0.1
 IMG_SIZE = 256
 NUM_WORKERS = 2
-MODEL_SAVE_DIR = "/home/starsystem/Documents/SceneUnderstanding/models/"
+MODEL_SAVE_DIR = "../models/"
 MODEL_SAVE_NAME = "Foundation.pt"
 
 print(f"Using PyTorch version {torch.__version__}")
@@ -43,16 +43,16 @@ dataloader = torch.utils.data.DataLoader(dataset,
                                          num_workers = NUM_WORKERS,
                                          collate_fn = collate_fn)
 
-# model = Foundation(num_blocks = NUM_BLOCKS,
-#                    num_heads = NUM_HEADS, 
-#                    unk_char = dataset.getunk(),
-#                    vocab_size=VOCAB_SIZE, 
-#                    embd_size=EMBD_SIZE, 
-#                    dropout = DROPOUT).to(device)
+model = Foundation(num_blocks = NUM_BLOCKS,
+                   num_heads = NUM_HEADS, 
+                   unk_char = dataset.getunk(),
+                   vocab_size=VOCAB_SIZE, 
+                   embd_size=EMBD_SIZE, 
+                   dropout = DROPOUT).to(device)
 print(f"The unk char is {dataset.getunk()}")
 
 
-model = torch.load(MODEL_SAVE_DIR + MODEL_SAVE_NAME)
+# model = torch.load(MODEL_SAVE_DIR + MODEL_SAVE_NAME)
 optimizer = model.config_optimizer(LEARNING_RATE,)
 
 
@@ -66,7 +66,7 @@ img_processor = torchvision.transforms.Compose([
 
 
 #training loop
-for _ in range(20):
+for _ in range(2):
     model.train()
     progress_bar = tqdm.tqdm(dataloader, desc = "COCO dataset")
     i = 0
@@ -75,16 +75,16 @@ for _ in range(20):
         x = (x[0].to(device), x[1].to(device))
         y = y.to(device)
 
-        if i % 1_000== 0:
-            print(f"Saving model")
-            torch.save(model, MODEL_SAVE_DIR + MODEL_SAVE_NAME)
-            model.eval()
-            with torch.no_grad():
-                output = model(x)
-                output = torch.argmax(output, dim = -1)
-                print(f"Predicted: {tokenizer.decode(output[0].cpu().numpy())}")
-                print(f"Actual: {tokenizer.decode(y[0].cpu().numpy())}")
-            model.train()
+        # if i % 1_000== 0:
+        #     print(f"Saving model")
+        #     torch.save(model, MODEL_SAVE_DIR + MODEL_SAVE_NAME)
+        #     model.eval()
+        #     with torch.no_grad():
+        #         output = model(x)
+        #         output = torch.argmax(output, dim = -1)
+        #         print(f"Predicted: {tokenizer.decode(output[0].cpu().numpy())}")
+        #         print(f"Actual: {tokenizer.decode(y[0].cpu().numpy())}")
+        #     model.train()
 
         loss, acc = model(x, y, return_loss = True)
         loss.backward()
